@@ -40,7 +40,9 @@ if [[ -z "${patch_dir}" ]]; then
   exit 1
 fi
 
-mapfile -t patches < <(find "${patch_dir}" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) | sort)
+# XanMod groups patches in nested folders (xanmod/, zen/, net/, ...).
+# Discover patch files recursively and apply them in lexical path order.
+mapfile -t patches < <(find "${patch_dir}" -type f \( -name '*.patch' -o -name '*.diff' \) | sort)
 
 if [[ "${#patches[@]}" -eq 0 ]]; then
   echo "No patch files were found in '${patch_dir}'."
