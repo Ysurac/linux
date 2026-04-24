@@ -11,6 +11,14 @@ on:
         description: URL of the patch repository
         required: false
         default: https://gitlab.com/xanmod/linux-patches.git
+      exclude_patch_dirs:
+        description: Comma-separated patch subdirectories to skip (for example binder,valve)
+        required: false
+        default: ""
+      skip_failed_patches:
+        description: Continue when a patch cannot be applied cleanly
+        required: false
+        default: "true"
 
 permissions:
   contents: read
@@ -60,7 +68,9 @@ jobs:
           set -euo pipefail
           bash .github/scripts/apply-xanmod-patches.sh \
             "${{ github.event.inputs.kernel_series || '7.0.y' }}" \
-            "${{ github.event.inputs.patch_repo_url || 'https://gitlab.com/xanmod/linux-patches.git' }}"
+            "${{ github.event.inputs.patch_repo_url || 'https://gitlab.com/xanmod/linux-patches.git' }}" \
+            "${{ github.event.inputs.exclude_patch_dirs || '' }}" \
+            "${{ github.event.inputs.skip_failed_patches || 'true' }}"
 
       - name: Configure kernel
         run: |
