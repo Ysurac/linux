@@ -49,6 +49,15 @@ if [[ "${#patches[@]}" -eq 0 ]]; then
   exit 1
 fi
 
+# git am creates commits and needs committer identity.
+if ! git -C "${repo_root}" config --get user.name >/dev/null; then
+  git -C "${repo_root}" config user.name "github-actions[bot]"
+fi
+
+if ! git -C "${repo_root}" config --get user.email >/dev/null; then
+  git -C "${repo_root}" config user.email "github-actions[bot]@users.noreply.github.com"
+fi
+
 echo "Applying ${#patches[@]} patches from '${patch_dir}'"
 git -C "${repo_root}" am --3way "${patches[@]}"
 
