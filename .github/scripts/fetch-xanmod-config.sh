@@ -1,22 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fetch XanMod kernel config from upstream repo
-# Supports x86_64 and arm64 (uses x86_64 base with arm64 adaptations)
+# Fetch XanMod kernel config from an upstream URL.
+# arm64 builds use the x86_64 XanMod config as a base and apply arch fixes.
 
 KERNEL_ARCH="${1:-x86_64}"
 OUTPUT_CONFIG="${2:-.config}"
-CONFIG_REPO_URL="${3:-https://gitlab.com/xanmod/linux/-/raw/master/CONFIGS/x86_64}"
+CONFIG_URL="${3:-https://gitlab.com/xanmod/linux/-/raw/6.18/CONFIGS/x86_64/config}"
+
+tmp_config="$(mktemp)"
+cleanup() {
+  rm -f "${tmp_config}"
+}
+trap cleanup EXIT
 
 echo "Fetching XanMod config for ${KERNEL_ARCH}"
 
+echo "Config URL: ${CONFIG_URL}"
+curl -fL "${CONFIG_URL}" -o "${tmp_config}"
+cp "${tmp_config}" "${OUTPUT_CONFIG}"
+echo "Config downloaded to: ${OUTPUT_CONFIG}"
+
 case "${KERNEL_ARCH}" in
   x86_64)
-    config_url="${CONFIG_REPO_URL}/.config"
     ;;
   arm64)
-    # arm64 uses x86_64 base adapted
-    config_url="${CONFIG_REPO_URL/.../x86_64}/.config"
+    echo "Adapting x86_64 config for arm64"
+
+    # Drop x86-only toggles from the imported base config.
+    sed -i -E \
+      -e '/^CONFIG_(X86|X86_|IA32|PARAVIRT|KVM_INTEL|KVM_AMD|EFI_MIXED|MICROCODE_INTEL|MICROCODE_AMD|AMD_NUMA|INTEL_[A-Z0-9_]+|XEN|ACPI_HOTPLUG_MEMORY|DMI|I8K|MTRR|SMP_X86)/d' \
+      -e '/^# CONFIG_(X86|IA32|PARAVIRT|KVM_INTEL|KVM_AMD|EFI_MIXED|XEN).* is not set/d' \
+      "${OUTPUT_CONFIG}"
+
+    # Ensure arm64 architecture markers are set before olddefconfig normalizes options.
+    {
+      echo "CONFIG_ARM64=y"
+      echo "# CONFIG_X86 is not set"
+      echo "CONFIG_64BIT=y"
+      echo "CONFIG_ARM64_4K_PAGES=y"
+      echo "CONFIG_ARM64_VA_BITS=48"
+      echo "CONFIG_ARM64_VA_BITS_48=y"
+    } >> "${OUTPUT_CONFIG}"
     ;;
   *)
     echo "Error: unsupported architecture ${KERNEL_ARCH}"
@@ -24,25 +49,4 @@ case "${KERNEL_ARCH}" in
     ;;
 esac
 
-echo "Config URL: ${config_url}"
-if curl -fL "${config_url}" -o "${OUTPUT_CONFIG}"; then
-  echo "Config downloaded to: ${OUTPUT_CONFIG}"
-  
-  # Basic arm64-specific adaptations if building for arm64
-  if [[ "${KERNEL_ARCH}" == "arm64" ]]; then
-    echo "Applying arm64 adaptations to config"
-    # Remove x86-specific options and set arm64-specific defaults
-    sed -i '/^CONFIG_X86/d; /^CONFIG_IA32/d; /^CONFIG_PARAVIRT/d; /^CONFIG_CRYPTO_TWOFISH_AVX/d;' "${OUTPUT_CONFIG}"
-    # Ensure critical arm64 configs are present
-    {
-      echo "CONFIG_ARM64=y"
-      echo "CONFIG_ARM64_VA_BITS=48"
-      echo "CONFIG_ARM64_VA_BITS_DEFAULT=48"
-    } >> "${OUTPUT_CONFIG}"
-  fi
-  
-  echo "Config prepared successfully."
-else
-  echo "Failed to download config from ${config_url}"
-  exit 1
-fi
+echo "Config prepared successfully."
