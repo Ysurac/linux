@@ -26,14 +26,14 @@ on:
       exclude_patch_dirs:
         description: Comma-separated patch subdirectories to skip (for example binder,valve)
         required: false
-        default: ""
+        default: "pci_acso,valve"
       skip_failed_patches:
         description: Continue when a patch cannot be applied cleanly
         required: false
         default: "true"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   patch-and-build:
@@ -50,7 +50,7 @@ jobs:
             extra_packages: ""
             x86_64_level: "1"
             isa_id: x64v1
-            localversion_suffix: -x64v1
+            localversion_suffix: -omr-x64v1
           - artifact_arch: x86_64-x64v2
             kernel_arch: x86_64
             cross_compile: ""
@@ -59,7 +59,7 @@ jobs:
             extra_packages: ""
             x86_64_level: "2"
             isa_id: x64v2
-            localversion_suffix: -x64v2
+            localversion_suffix: -omr-x64v2
           - artifact_arch: x86_64-x64v3
             kernel_arch: x86_64
             cross_compile: ""
@@ -68,7 +68,7 @@ jobs:
             extra_packages: ""
             x86_64_level: "3"
             isa_id: x64v3
-            localversion_suffix: -x64v3
+            localversion_suffix: -omr-x64v3
           - artifact_arch: arm64
             kernel_arch: arm64
             cross_compile: aarch64-linux-gnu-
@@ -77,7 +77,7 @@ jobs:
             extra_packages: gcc-aarch64-linux-gnu
             x86_64_level: ""
             isa_id: generic
-            localversion_suffix: ""
+            localversion_suffix: -omr
 
     steps:
       - name: Checkout kernel source
@@ -86,6 +86,12 @@ jobs:
       - name: Install build dependencies
         run: |
           set -euo pipefail
+
+          if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
+            # bindeb-pkg runs dpkg-checkbuilddeps for arm64 and requires arm64 dev packages.
+            sudo dpkg --add-architecture arm64
+          fi
+
           sudo apt-get update
           sudo apt-get install -y \
             bc \
@@ -103,13 +109,17 @@ jobs:
             xz-utils \
             ${{ matrix.extra_packages }}
 
+          if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
+            sudo apt-get install -y libssl-dev:arm64
+          fi
+
       - name: Apply XanMod patch stack
         run: |
           set -euo pipefail
           bash .github/scripts/apply-xanmod-patches.sh \
             "${{ github.event.inputs.kernel_series || '6.18.y' }}" \
             "${{ github.event.inputs.patch_repo_url || 'https://gitlab.com/xanmod/linux-patches.git' }}" \
-            "${{ github.event.inputs.exclude_patch_dirs || '' }}" \
+            "${{ github.event.inputs.exclude_patch_dirs || 'pci_acso,valve' }}" \
             "${{ github.event.inputs.skip_failed_patches || 'true' }}"
 
       - name: Apply upstream and OMR patches
@@ -193,6 +203,13 @@ jobs:
             "${build_dir}/.config" \
             "${{ github.event.inputs.xanmod_config_url || 'https://gitlab.com/xanmod/linux/-/raw/6.18/CONFIGS/x86_64/config' }}"
 
+      - name: Apply kernel branding
+        run: |
+          set -euo pipefail
+          build_dir="build-${{ matrix.artifact_arch }}"
+          scripts/config --file "${build_dir}/.config" \
+            --set-str LOCALVERSION "${{ matrix.localversion_suffix }}"
+
       - name: Apply x86_64 ISA tuning
         if: matrix.kernel_arch == 'x86_64'
         run: |
@@ -201,12 +218,7 @@ jobs:
 
           if grep -Rqs '^[[:space:]]*config[[:space:]]+X86_64_VERSION$' arch/x86; then
             scripts/config --file "${build_dir}/.config" \
-              --set-str LOCALVERSION "${{ matrix.localversion_suffix }}" \
               --set-val X86_64_VERSION "${{ matrix.x86_64_level }}"
-          else
-            # Fallback for trees where the XanMod CPU-level symbol is not present.
-            scripts/config --file "${build_dir}/.config" \
-              --set-str LOCALVERSION "${{ matrix.localversion_suffix }}"
           fi
 
       - name: Prepare kernel config (olddefconfig)
@@ -235,10 +247,7 @@ jobs:
         run: |
           set -euo pipefail
           build_dir="build-${{ matrix.artifact_arch }}"
-          gv="$(git rev-parse --short=7 HEAD)"
-          dv="$(date +%Y%m%d)"
           lv="$(make -s O="${build_dir}" ARCH="${{ matrix.kernel_arch }}" CROSS_COMPILE="${{ matrix.cross_compile }}" kernelrelease)"
-          rv="0"
           export DEBFULLNAME="Alexandre Frade"
           export DEBEMAIL="kernel@xanmod.org"
 
@@ -248,7 +257,7 @@ jobs:
             CROSS_COMPILE="${{ matrix.cross_compile }}" \
             KDEB_BUILDDIR="${build_dir}" \
             KDEB_CHANGELOG_DIST="noble" \
-            KDEB_PKGVERSION="${lv}-${rv}~${dv}.g${gv}" \
+            KDEB_PKGVERSION="${lv}" \
             KBUILD_PACKAGE_ORIGIN="XanMod" \
             KBUILD_BUILD_VERSION="1" \
             bindeb-pkg 2>&1 | tee "${build_dir}/bindeb.log"
@@ -260,6 +269,24 @@ jobs:
           artifact_dir="deb-packages-${{ matrix.kernel_arch }}-${{ matrix.isa_id }}"
           mkdir -p "${artifact_dir}"
           find . -maxdepth 2 -type f \( -name "*.deb" -o -name "*.buildinfo" -o -name "*.changes" \) ! -name "*dbg*" -exec cp {} "${artifact_dir}/" \; 2>/dev/null || echo "No DEB packages found"
+
+          # Debian files are <package>_<version>_<arch>.deb. Kernel packages also embed
+          # the same version in <package>, so normalize copied artifact names to keep it once.
+          for deb in "${artifact_dir}"/*.deb; do
+            [ -e "${deb}" ] || break
+            base="$(basename "${deb}")"
+            pkg="${base%%_*}"
+            rest="${base#*_}"
+            ver="${rest%%_*}"
+            arch_part="${rest#*_}"
+
+            if [[ "${pkg}" == *-"${ver}" ]]; then
+              short_pkg="${pkg%-$ver}"
+              new_name="${short_pkg}_${ver}_${arch_part}"
+              mv -f "${deb}" "${artifact_dir}/${new_name}"
+            fi
+          done
+
           cp "${build_dir}/bindeb.log" "${artifact_dir}/" 2>/dev/null || true
           ls -lh "${artifact_dir}"/ || true
 
@@ -270,3 +297,39 @@ jobs:
           path: deb-packages-${{ matrix.kernel_arch }}-${{ matrix.isa_id }}
           if-no-files-found: warn
           retention-days: 7
+
+  publish-release:
+    runs-on: ubuntu-24.04
+    needs: patch-and-build
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kernel-deb-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate release metadata
+        id: release_meta
+        run: |
+          set -euo pipefail
+          dv="$(date +%Y%m%d)"
+          sha="${GITHUB_SHA::7}"
+          tag="omr-kernel-${dv}-${GITHUB_RUN_NUMBER}-${sha}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "name=OMR Kernel ${dv} (run ${GITHUB_RUN_NUMBER})" >> "${GITHUB_OUTPUT}"
+
+      - name: Show release files
+        run: |
+          set -euo pipefail
+          ls -lh release-assets || true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: ${{ steps.release_meta.outputs.name }}
+          generate_release_notes: true
+          files: |
+            release-assets/*.deb
