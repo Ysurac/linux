@@ -240,12 +240,16 @@ jobs:
           build_dir="build-${{ matrix.artifact_arch }}"
           lv="$(make -s O="${build_dir}" ARCH="${{ matrix.kernel_arch }}" CROSS_COMPILE="${{ matrix.cross_compile }}" kernelrelease)"
           dpkg_flags=""
+          deb_build_profiles=""
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
             # Cross-build on amd64 runner: skip dpkg-checkbuilddeps for arm64 host deps.
             dpkg_flags="-d"
+            # Skip debug symbol package in cross build to avoid fragile image-dbg stage.
+            deb_build_profiles="pkg.linux-upstream.nokerneldbg"
           fi
           export DEBFULLNAME="Alexandre Frade"
           export DEBEMAIL="kernel@xanmod.org"
+          export DEB_BUILD_PROFILES="${deb_build_profiles}"
 
           make -j"$(nproc)" \
             O="${build_dir}" \
