@@ -234,6 +234,13 @@ jobs:
           # Ubuntu 24.04 ships debhelper compat 13; kernel script defaults to 12.
           sed -i 's/debhelper-compat (= 12)/debhelper-compat (= 13)/' scripts/package/mkdebian
 
+          if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
+            # For cross-packaging on an amd64 runner, remove the linux-libc-dev stanza
+            # from mkdebian so dpkg-buildpackage does not try to install arm64 host headers.
+            # We only need linux-image and linux-headers for OMR arm64 builds.
+            sed -i '/^Package: linux-libc-dev$/,/^Multi-Arch: same$/d' scripts/package/mkdebian
+          fi
+
       - name: Build Debian kernel package
         run: |
           set -euo pipefail
@@ -244,12 +251,14 @@ jobs:
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
             # Cross-build on amd64 runner: skip dpkg-checkbuilddeps for arm64 host deps.
             dpkg_flags="-d"
-            # Skip debug symbol package in cross build to avoid fragile image-dbg stage.
+            # Skip dbg package: requires arm64 host tooling not present on the amd64 runner.
             deb_build_profiles="pkg.linux-upstream.nokerneldbg"
           fi
           export DEBFULLNAME="Alexandre Frade"
           export DEBEMAIL="kernel@xanmod.org"
           export DEB_BUILD_PROFILES="${deb_build_profiles}"
+          # Prevent dpkg-buildpackage from re-running the full kernel compile (already done above).
+          export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:-} noautodbgsym"
 
           make -j"$(nproc)" \
             O="${build_dir}" \
