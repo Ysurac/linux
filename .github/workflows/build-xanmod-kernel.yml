@@ -235,10 +235,23 @@ jobs:
           sed -i 's/debhelper-compat (= 12)/debhelper-compat (= 13)/' scripts/package/mkdebian
 
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
-            # For cross-packaging on an amd64 runner, remove the linux-libc-dev stanza
-            # from mkdebian so dpkg-buildpackage does not try to install arm64 host headers.
-            # We only need linux-image and linux-headers for OMR arm64 builds.
+            # For cross-packaging on an amd64 runner, remove linux-libc-dev to avoid
+            # userspace header packaging paths that require arm64 host assumptions.
             sed -i '/^Package: linux-libc-dev$/,/^Multi-Arch: same$/d' scripts/package/mkdebian
+
+            # dpkg-buildpackage calls `make -f debian/rules build` and then
+            # `make -f debian/rules binary` as two separate invocations.  Each
+            # invocation triggers the build-arch prerequisite, which re-runs
+            # `make olddefconfig && make headers all` — a full kernel rebuild that
+            # is redundant (the kernel is already built before bindeb-pkg) and
+            # fragile for arm64 cross-compilation (module re-signing, KBUILD_BUILD_VERSION
+            # mismatch, etc.).  Make build-arch a no-op in the rules template so
+            # dpkg-buildpackage can package the already-built kernel without rebuilding.
+            awk '/^build-arch:$/ { print; skip=1; next }
+                 skip && /^\t/  { next }
+                 { skip=0; print }' \
+              scripts/package/debian/rules > /tmp/debian.rules.new
+            mv /tmp/debian.rules.new scripts/package/debian/rules
           fi
 
       - name: Build Debian kernel package
@@ -248,11 +261,13 @@ jobs:
           lv="$(make -s O="${build_dir}" ARCH="${{ matrix.kernel_arch }}" CROSS_COMPILE="${{ matrix.cross_compile }}" kernelrelease)"
           dpkg_flags=""
           deb_build_profiles=""
+          kbuild_debarch=""
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
             # Cross-build on amd64 runner: skip dpkg-checkbuilddeps for arm64 host deps.
             dpkg_flags="-d"
-            # Skip dbg package: requires arm64 host tooling not present on the amd64 runner.
-            deb_build_profiles="pkg.linux-upstream.nokerneldbg"
+            # Build only linux-image for arm64 on amd64 CI runners.
+            deb_build_profiles="pkg.linux-upstream.nokerneldbg pkg.linux-upstream.nokernelheaders"
+            kbuild_debarch="arm64"
           fi
           export DEBFULLNAME="Alexandre Frade"
           export DEBEMAIL="kernel@xanmod.org"
@@ -260,7 +275,7 @@ jobs:
           # Prevent dpkg-buildpackage from re-running the full kernel compile (already done above).
           export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:-} noautodbgsym"
 
-          make -j"$(nproc)" \
+          if ! make -j"$(nproc)" \
             O="${build_dir}" \
             ARCH="${{ matrix.kernel_arch }}" \
             CROSS_COMPILE="${{ matrix.cross_compile }}" \
@@ -269,8 +284,13 @@ jobs:
             KDEB_PKGVERSION="${lv}" \
             KBUILD_PACKAGE_ORIGIN="XanMod" \
             KBUILD_BUILD_VERSION="1" \
+            KBUILD_DEBARCH="${kbuild_debarch}" \
             DPKG_FLAGS="${dpkg_flags}" \
-            bindeb-pkg 2>&1 | tee "${build_dir}/bindeb.log"
+            bindeb-pkg 2>&1 | tee "${build_dir}/bindeb.log"; then
+            echo "bindeb-pkg failed; last 200 log lines:" >&2
+            tail -n 200 "${build_dir}/bindeb.log" >&2 || true
+            exit 1
+          fi
 
       - name: Collect Debian packages
         run: |
