@@ -278,12 +278,14 @@ jobs:
           lv="$(make -s O="${build_dir}" ARCH="${{ matrix.kernel_arch }}" CROSS_COMPILE="${{ matrix.cross_compile }}" kernelrelease)"
           dpkg_flags=""
           deb_build_profiles=""
+          dpkg_profile_flags=""
           kbuild_debarch=""
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
             # Cross-build on amd64 runner: skip dpkg-checkbuilddeps for arm64 host deps.
             dpkg_flags="-d"
-            # Skip debug package (requires arm64 host tooling); headers are cross-build safe.
-            deb_build_profiles="pkg.linux-upstream.nokerneldbg"
+            # Build only linux-image for arm64 CI cross-builds.
+            deb_build_profiles="pkg.linux-upstream.nokerneldbg pkg.linux-upstream.nokernelheaders"
+            dpkg_profile_flags="-Ppkg.linux-upstream.nokerneldbg,pkg.linux-upstream.nokernelheaders"
             kbuild_debarch="arm64"
           fi
           export DEBFULLNAME="Alexandre Frade"
@@ -302,7 +304,7 @@ jobs:
             KBUILD_PACKAGE_ORIGIN="XanMod" \
             KBUILD_BUILD_VERSION="1" \
             KBUILD_DEBARCH="${kbuild_debarch}" \
-            DPKG_FLAGS="${dpkg_flags}" \
+            DPKG_FLAGS="${dpkg_flags} ${dpkg_profile_flags}" \
             bindeb-pkg 2>&1 | tee "${build_dir}/bindeb.log"; then
             echo "bindeb-pkg failed; last 200 log lines:" >&2
             tail -n 200 "${build_dir}/bindeb.log" >&2 || true
@@ -336,6 +338,15 @@ jobs:
 
           cp "${build_dir}/bindeb.log" "${artifact_dir}/" 2>/dev/null || true
           ls -lh "${artifact_dir}"/ || true
+
+      - name: Upload bindeb log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindeb-log-${{ matrix.kernel_arch }}-${{ matrix.isa_id }}
+          path: build-${{ matrix.artifact_arch }}/bindeb.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
