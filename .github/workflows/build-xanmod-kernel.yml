@@ -72,8 +72,8 @@ jobs:
           - artifact_arch: arm64
             kernel_arch: arm64
             cross_compile: aarch64-linux-gnu-
-            image_target: Image
-            image_path: arch/arm64/boot/Image
+            image_target: Image.gz
+            image_path: arch/arm64/boot/Image.gz
             extra_packages: gcc-aarch64-linux-gnu
             x86_64_level: ""
             isa_id: generic
