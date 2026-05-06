@@ -265,8 +265,8 @@ jobs:
           if [ "${{ matrix.kernel_arch }}" = "arm64" ]; then
             # Cross-build on amd64 runner: skip dpkg-checkbuilddeps for arm64 host deps.
             dpkg_flags="-d"
-            # Build only linux-image for arm64 on amd64 CI runners.
-            deb_build_profiles="pkg.linux-upstream.nokerneldbg pkg.linux-upstream.nokernelheaders"
+            # Skip debug package (requires arm64 host tooling); headers are cross-build safe.
+            deb_build_profiles="pkg.linux-upstream.nokerneldbg"
             kbuild_debarch="arm64"
           fi
           export DEBFULLNAME="Alexandre Frade"
