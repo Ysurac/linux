@@ -319,23 +319,6 @@ jobs:
           mkdir -p "${artifact_dir}"
           find . -maxdepth 2 -type f \( -name "*.deb" -o -name "*.buildinfo" -o -name "*.changes" \) ! -name "*dbg*" -exec cp {} "${artifact_dir}/" \; 2>/dev/null || echo "No DEB packages found"
 
-          # Debian files are <package>_<version>_<arch>.deb. Kernel packages also embed
-          # the same version in <package>, so normalize copied artifact names to keep it once.
-          for deb in "${artifact_dir}"/*.deb; do
-            [ -e "${deb}" ] || break
-            base="$(basename "${deb}")"
-            pkg="${base%%_*}"
-            rest="${base#*_}"
-            ver="${rest%%_*}"
-            arch_part="${rest#*_}"
-
-            if [[ "${pkg}" == *-"${ver}" ]]; then
-              short_pkg="${pkg%-$ver}"
-              new_name="${short_pkg}_${ver}_${arch_part}"
-              mv -f "${deb}" "${artifact_dir}/${new_name}"
-            fi
-          done
-
           cp "${build_dir}/bindeb.log" "${artifact_dir}/" 2>/dev/null || true
           ls -lh "${artifact_dir}"/ || true
 
