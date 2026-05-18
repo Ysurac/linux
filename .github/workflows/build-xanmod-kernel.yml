@@ -198,8 +198,14 @@ jobs:
         run: |
           set -euo pipefail
           build_dir="build-${{ matrix.artifact_arch }}"
+          
+          # Generate dynamic version string with date and commit hash
+          BUILD_DATE=$(date +%Y%m%d)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          LOCALVERSION="-${BUILD_DATE}.${COMMIT_HASH}"
+          
           scripts/config --file "${build_dir}/.config" \
-            --set-str LOCALVERSION "${{ matrix.localversion_suffix }}"
+            --set-str LOCALVERSION "${LOCALVERSION}"
 
       - name: Apply x86_64 ISA tuning
         if: matrix.kernel_arch == 'x86_64'
