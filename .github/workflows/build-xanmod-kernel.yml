@@ -202,7 +202,7 @@ jobs:
           # Generate dynamic version string with date and ISA identifier
           BUILD_DATE=$(date +%Y%m%d)
           ISA_ID="${{ matrix.isa_id }}"
-          LOCALVERSION="-${BUILD_DATE}.${ISA_ID}"
+          LOCALVERSION="-${BUILD_DATE}.${ISA_ID}-omr"
           
           scripts/config --file "${build_dir}/.config" \
             --set-str LOCALVERSION "${LOCALVERSION}"
