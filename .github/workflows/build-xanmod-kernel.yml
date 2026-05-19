@@ -199,10 +199,10 @@ jobs:
           set -euo pipefail
           build_dir="build-${{ matrix.artifact_arch }}"
           
-          # Generate dynamic version string with date and commit hash
+          # Generate dynamic version string with date and ISA identifier
           BUILD_DATE=$(date +%Y%m%d)
-          COMMIT_HASH=$(git rev-parse --short HEAD)
-          LOCALVERSION="-${BUILD_DATE}.${COMMIT_HASH}"
+          ISA_ID="${{ matrix.isa_id }}"
+          LOCALVERSION="-${BUILD_DATE}.${ISA_ID}"
           
           scripts/config --file "${build_dir}/.config" \
             --set-str LOCALVERSION "${LOCALVERSION}"
