@@ -306,6 +306,9 @@ jobs:
           export DEBFULLNAME="Alexandre Frade"
           export DEBEMAIL="kernel@xanmod.org"
           export DEB_BUILD_PROFILES="${deb_build_profiles}"
+          # Keep .deb control/data members compatible with older reprepro versions.
+          export KDEB_COMPRESS="xz"
+          export DPKG_DEB_COMPRESSOR_TYPE="xz"
           # Prevent dpkg-buildpackage from re-running the full kernel compile (already done above).
           export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:-} noautodbgsym"
 
@@ -333,6 +336,11 @@ jobs:
           artifact_dir="deb-packages-${{ matrix.kernel_arch }}-${{ matrix.isa_id }}"
           mkdir -p "${artifact_dir}"
           find . -maxdepth 2 -type f \( -name "*.deb" -o -name "*.buildinfo" -o -name "*.changes" \) ! -name "*dbg*" -exec cp {} "${artifact_dir}/" \; 2>/dev/null || echo "No DEB packages found"
+
+          for deb in "${artifact_dir}"/*.deb; do
+            [ -e "${deb}" ] || continue
+            dpkg-deb --info "${deb}" >/dev/null
+          done
 
           cp "${build_dir}/bindeb.log" "${artifact_dir}/" 2>/dev/null || true
           ls -lh "${artifact_dir}"/ || true
