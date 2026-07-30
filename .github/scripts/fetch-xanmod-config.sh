@@ -41,6 +41,15 @@ case "${KERNEL_ARCH}" in
       echo "CONFIG_ARM64_4K_PAGES=y"
       echo "CONFIG_ARM64_VA_BITS=48"
       echo "CONFIG_ARM64_VA_BITS_48=y"
+
+      # The x86_64 base config never carried these arm64-only options, so
+      # restore what arch/arm64/configs/defconfig normally provides. Without
+      # PCI_HOST_GENERIC, generic-PCI arm64 cloud platforms (e.g. Scaleway)
+      # can't enumerate their virtio-pci bus and boot without a root disk/NIC;
+      # without SERIAL_AMBA_PL011 there is no serial console either.
+      echo "CONFIG_PCI_HOST_GENERIC=y"
+      echo "CONFIG_SERIAL_AMBA_PL011=y"
+      echo "CONFIG_SERIAL_AMBA_PL011_CONSOLE=y"
     } >> "${OUTPUT_CONFIG}"
     ;;
   *)
