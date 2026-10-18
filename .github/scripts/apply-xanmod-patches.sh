@@ -42,6 +42,10 @@ if [[ -z "${patch_dir}" ]]; then
   exit 1
 fi
 
+# Local refreshed copies of upstream patches that no longer apply on the
+# current stable release, matched by their path relative to the patch dir.
+override_dir="${repo_root}/.github/patches/$(basename "${patch_dir}")"
+
 readarray -t exclude_dirs < <(printf '%s' "${EXCLUDE_DIRS_CSV}" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | sed '/^$/d')
 
 # XanMod groups patches in nested folders (xanmod/, zen/, net/, ...).
@@ -57,6 +61,11 @@ for patch in "${all_patches[@]}"; do
     fi
   done
   if [[ "${skip}" -eq 0 ]]; then
+    override="${override_dir}/${patch#"${patch_dir}"/}"
+    if [[ -f "${override}" ]]; then
+      echo "Using local override: ${override#"${repo_root}"/}"
+      patch="${override}"
+    fi
     patches+=("${patch}")
   fi
 done

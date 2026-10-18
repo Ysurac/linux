@@ -1,0 +1,26 @@
+From 635e6585dd97869c11ccdfd66cb97249218a1eae Mon Sep 17 00:00:00 2001
+From: Alexandre Frade <kernel@xanmod.org>
+Date: Fri, 30 May 2025 19:58:58 +0000
+Subject: [PATCH] XANMOD: mm/vmscan: Reduce amount of swapping
+
+Signed-off-by: Alexandre Frade <kernel@xanmod.org>
+---
+ mm/vmscan.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 8d9a38f1a218..f6d696698b79 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -217,7 +217,7 @@ static u64 workingset_protection_prev_totalram __read_mostly = 0;
+ /*
+  * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
+  */
+-int vm_swappiness = 60;
++int vm_swappiness = 10;
+ 
+ static int sc_swappiness(struct scan_control *sc, struct mem_cgroup *memcg)
+ {
+-- 
+2.56.0
+

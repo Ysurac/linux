@@ -1,0 +1,79 @@
+From a73816ea3fc89bb31c487a74bafb0be32f373bc4 Mon Sep 17 00:00:00 2001
+From: Alexandre Frade <kernel@xanmod.org>
+Date: Sun, 15 Sep 2024 23:03:38 +0000
+Subject: [PATCH] XANMOD: sched: Add yield_type sysctl to reduce or disable
+ sched_yield [v6.18.4+]
+
+Signed-off-by: Alexandre Frade <kernel@xanmod.org>
+---
+ kernel/sched/syscalls.c | 16 +++++++++++++++-
+ kernel/sysctl.c         | 11 +++++++++++
+ 2 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/kernel/sched/syscalls.c b/kernel/sched/syscalls.c
+index f0e7b6027743..84b3bf3e9477 100644
+--- a/kernel/sched/syscalls.c
++++ b/kernel/sched/syscalls.c
+@@ -1355,15 +1355,29 @@ SYSCALL_DEFINE3(sched_getaffinity, pid_t, pid, unsigned int, len,
+ 	return ret;
+ }
+ 
++/**
++ * sysctl_sched_yield_type - choose the yield level that will perform.
++ *
++ * 0: No yield.
++ * 1: Yield only to better priority/deadline tasks.
++ * 2: Re-queue current tasks. (default CFS)
++ */
++__read_mostly int sysctl_sched_yield_type = 2;
++
+ static void do_sched_yield(void)
+ {
+ 	struct rq_flags rf;
+ 	struct rq *rq;
+ 
++	if (!sysctl_sched_yield_type)
++		return;
++
+ 	rq = this_rq_lock_irq(&rf);
+ 
+ 	schedstat_inc(rq->yld_count);
+-	rq->donor->sched_class->yield_task(rq);
++
++	if (sysctl_sched_yield_type > 1)
++		rq->donor->sched_class->yield_task(rq);
+ 
+ 	preempt_disable();
+ 	rq_unlock_irq(rq, &rf);
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index 6f779af65e8b..655afea94d1b 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -32,6 +32,8 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
+ 
+ #if defined(CONFIG_SYSCTL)
+ 
++extern int sysctl_sched_yield_type;
++
+ #ifdef CONFIG_USER_NS
+ extern int unprivileged_userns_clone;
+ #endif
+@@ -1459,6 +1461,15 @@ int proc_do_static_key(const struct ctl_table *table, int write,
+ }
+ 
+ static const struct ctl_table sysctl_subsys_table[] = {
++	{
++		.procname	= "yield_type",
++		.data		= &sysctl_sched_yield_type,
++		.maxlen		= sizeof (int),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec,
++		.extra1		= SYSCTL_ZERO,
++		.extra2		= SYSCTL_TWO,
++	},
+ #ifdef CONFIG_USER_NS
+ 	{
+ 		.procname	= "unprivileged_userns_clone",
+-- 
+2.56.0
+

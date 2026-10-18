@@ -14,7 +14,7 @@ on:
       stable_patch_url:
         description: URL of the upstream stable patch archive to apply
         required: false
-        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.32.xz
+        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz
       mptcp_patch_url:
         description: URL of the MPTCP BPF scheduler patch
         required: false
@@ -108,6 +108,13 @@ jobs:
             xz-utils \
             ${{ matrix.extra_packages }}
 
+      - name: Apply upstream stable patch
+        run: |
+          set -euo pipefail
+          bash .github/scripts/apply-patch-url.sh \
+            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz' }}" \
+            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz' }}")"
+
       - name: Apply XanMod patch stack
         run: |
           set -euo pipefail
@@ -117,75 +124,15 @@ jobs:
             "${{ github.event.inputs.exclude_patch_dirs || 'pci_acso,valve' }}" \
             "${{ github.event.inputs.skip_failed_patches || 'true' }}"
 
-      - name: Apply upstream and OMR patches
+      - name: Apply OMR patches
         run: |
           set -euo pipefail
-          stable_patch_url="${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.26.xz' }}"
-          mptcp_patch_url="${{ github.event.inputs.mptcp_patch_url || 'https://github.com/Ysurac/openmptcprouter/blob/develop/6.18/target/linux/generic/hack-6.18/999-mptcp-bpf-scheduler.patch' }}"
-          bbr_v3_patch_url="${{ github.event.inputs.bbr_v3_patch_url || 'https://github.com/Ysurac/openmptcprouter/raw/refs/heads/develop/6.18/target/linux/generic/hack-6.18/999-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch' }}"
-
-          normalize_url() {
-            local url="$1"
-            if [[ "${url}" == *"github.com"*"/blob/"* ]]; then
-              echo "${url}" | sed -E 's#https://github.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)#https://raw.githubusercontent.com/\1/\2/\3/\4#'
-              return
-            fi
-            echo "${url}"
-          }
-
-          if ! git config --get user.name >/dev/null; then
-            git config user.name "github-actions[bot]"
-          fi
-
-          if ! git config --get user.email >/dev/null; then
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-          fi
-
-          apply_patch_file() {
-            local patch_file="$1"
-            local patch_label="$2"
-
-            echo "Applying ${patch_label}"
-
-            if git am --3way "${patch_file}"; then
-              return
-            fi
-
-            git am --abort || true
-
-            if git apply --check "${patch_file}"; then
-              git apply "${patch_file}"
-              git add -A
-              git commit -m "Apply ${patch_label}"
-              return
-            fi
-
-            if patch -p1 --forward < "${patch_file}"; then
-              git add -A
-              git commit -m "Apply ${patch_label}"
-              return
-            fi
-
-            echo "Failed to apply ${patch_label}"
-            exit 1
-          }
-
-          tmp_dir="$(mktemp -d)"
-          trap 'rm -rf "${tmp_dir}"' EXIT
-
-          stable_archive="${tmp_dir}/stable.patch.xz"
-          stable_patch="${tmp_dir}/stable.patch"
-          curl -fL "$(normalize_url "${stable_patch_url}")" -o "${stable_archive}"
-          unxz -c "${stable_archive}" > "${stable_patch}"
-          apply_patch_file "${stable_patch}" "upstream stable patch $(basename "${stable_patch_url}")"
-
-          mptcp_patch="${tmp_dir}/mptcp-bpf-scheduler.patch"
-          curl -fL "$(normalize_url "${mptcp_patch_url}")" -o "${mptcp_patch}"
-          apply_patch_file "${mptcp_patch}" "MPTCP BPF scheduler patch"
-
-          bbr_v3_patch="${tmp_dir}/tcp-bbr-v3.patch"
-          curl -fL "$(normalize_url "${bbr_v3_patch_url}")" -o "${bbr_v3_patch}"
-          apply_patch_file "${bbr_v3_patch}" "TCP BBR v3 congestion control patch"
+          bash .github/scripts/apply-patch-url.sh \
+            "${{ github.event.inputs.mptcp_patch_url || 'https://github.com/Ysurac/openmptcprouter/blob/develop/6.18/target/linux/generic/hack-6.18/999-mptcp-bpf-scheduler.patch' }}" \
+            "MPTCP BPF scheduler patch"
+          bash .github/scripts/apply-patch-url.sh \
+            "${{ github.event.inputs.bbr_v3_patch_url || 'https://github.com/Ysurac/openmptcprouter/raw/refs/heads/develop/6.18/target/linux/generic/hack-6.18/999-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch' }}" \
+            "TCP BBR v3 congestion control patch"
 
       - name: Configure kernel
         run: |
