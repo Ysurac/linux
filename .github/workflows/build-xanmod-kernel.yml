@@ -222,10 +222,14 @@ jobs:
           set -euo pipefail
           build_dir="build-${{ matrix.artifact_arch }}"
 
-          if grep -Rqs '^[[:space:]]*config[[:space:]]+X86_64_VERSION$' arch/x86; then
-            scripts/config --file "${build_dir}/.config" \
-              --set-val X86_64_VERSION "${{ matrix.x86_64_level }}"
+          if ! grep -ERqs '^[[:space:]]*config[[:space:]]+X86_64_VERSION$' arch/x86; then
+            echo "X86_64_VERSION Kconfig symbol not found; cannot apply ISA level ${{ matrix.x86_64_level }}" >&2
+            exit 1
           fi
+
+          scripts/config --file "${build_dir}/.config" \
+            -e GENERIC_CPU \
+            --set-val X86_64_VERSION "${{ matrix.x86_64_level }}"
 
       - name: Enable MPTCP BPF scheduler config
         run: |
@@ -249,6 +253,15 @@ jobs:
           set -euo pipefail
           build_dir="build-${{ matrix.artifact_arch }}"
           make O="${build_dir}" ARCH="${{ matrix.kernel_arch }}" CROSS_COMPILE="${{ matrix.cross_compile }}" olddefconfig
+
+          if [ "${{ matrix.kernel_arch }}" = "x86_64" ]; then
+            if ! grep -qx 'CONFIG_GENERIC_CPU=y' "${build_dir}/.config" || \
+               ! grep -qx 'CONFIG_X86_64_VERSION=${{ matrix.x86_64_level }}' "${build_dir}/.config"; then
+              echo "ISA level mismatch, expected CONFIG_X86_64_VERSION=${{ matrix.x86_64_level }}:" >&2
+              grep -E '^CONFIG_(GENERIC_CPU|X86_64_VERSION)=' "${build_dir}/.config" >&2 || true
+              exit 1
+            fi
+          fi
 
       - name: Build kernel image and modules
         run: |
