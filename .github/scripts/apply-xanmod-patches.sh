@@ -75,6 +75,17 @@ if [[ "${#patches[@]}" -eq 0 ]]; then
   exit 1
 fi
 
+# An override that matches no upstream patch is silently ignored, which lets
+# the stale upstream version through (for example after an upstream rename).
+if [[ -d "${override_dir}" ]]; then
+  while IFS= read -r override; do
+    rel="${override#"${override_dir}"/}"
+    if [[ ! -f "${patch_dir}/${rel}" ]]; then
+      echo "::warning::Local override ${rel} matches no upstream patch; it was not applied"
+    fi
+  done < <(find "${override_dir}" -type f \( -name '*.patch' -o -name '*.diff' \) | sort)
+fi
+
 # git am creates commits and needs committer identity.
 if ! git -C "${repo_root}" config --get user.name >/dev/null; then
   git -C "${repo_root}" config user.name "github-actions[bot]"
