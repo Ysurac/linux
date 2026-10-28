@@ -14,7 +14,7 @@ on:
       stable_patch_url:
         description: URL of the upstream stable patch archive to apply
         required: false
-        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz
+        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz
       mptcp_patch_url:
         description: URL of the MPTCP BPF scheduler patch
         required: false
@@ -112,8 +112,8 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/apply-patch-url.sh \
-            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz' }}" \
-            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.57.xz' }}")"
+            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz' }}" \
+            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz' }}")"
 
       - name: Apply XanMod patch stack
         run: |
