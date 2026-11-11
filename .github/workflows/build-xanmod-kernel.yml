@@ -14,7 +14,7 @@ on:
       stable_patch_url:
         description: URL of the upstream stable patch archive to apply
         required: false
-        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz
+        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz
       omr_ref:
         description: OpenMPTCProuter branch/tag to take the 708-* backports and 99* hack patches from
         required: false
@@ -108,8 +108,8 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/apply-patch-url.sh \
-            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz' }}" \
-            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz' }}")"
+            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz' }}" \
+            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz' }}")"
 
       - name: Apply XanMod patch stack
         run: |
@@ -136,6 +136,12 @@ jobs:
           hacks="$(list hack-6.18 99)"
           [ -n "${hacks}" ] || { echo "No 99* OMR patches found" >&2; exit 1; }
           for url in ${backports} ${hacks}; do
+            # Local refreshed copies of OMR patches that no longer apply on the current stable release.
+            override=".github/patches/omr/$(basename "$(dirname "${url}")")/$(basename "${url}")"
+            if [ -f "${override}" ]; then
+              echo "Using local override: ${override}"
+              url="file://${PWD}/${override}"
+            fi
             bash .github/scripts/apply-patch-url.sh "${url}" "OMR $(basename "${url}")"
           done
 
