@@ -55,7 +55,7 @@ patches=()
 for patch in "${all_patches[@]}"; do
   skip=0
   for excluded in "${exclude_dirs[@]}"; do
-    if [[ "${patch}" == *"/${excluded}/"* ]]; then
+    if [[ "${patch}/" == *"/${excluded}/"* ]]; then
       skip=1
       break
     fi
