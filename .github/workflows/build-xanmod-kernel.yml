@@ -15,14 +15,10 @@ on:
         description: URL of the upstream stable patch archive to apply
         required: false
         default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.59.xz
-      mptcp_patch_url:
-        description: URL of the MPTCP BPF scheduler patch
+      omr_ref:
+        description: OpenMPTCProuter branch/tag to take the 708-* backports and 99* hack patches from
         required: false
-        default: https://github.com/Ysurac/openmptcprouter/blob/develop/6.18/target/linux/generic/hack-6.18/999-mptcp-bpf-scheduler.patch
-      bbr_v3_patch_url:
-        description: URL of the TCP BBR v3 congestion control patch
-        required: false
-        default: https://github.com/Ysurac/openmptcprouter/raw/refs/heads/develop/6.18/target/linux/generic/hack-6.18/999-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch
+        default: develop
       xanmod_config_url:
         description: XanMod x86_64 config URL
         required: false
@@ -125,14 +121,23 @@ jobs:
             "${{ github.event.inputs.skip_failed_patches || 'true' }}"
 
       - name: Apply OMR patches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OMR_REF: ${{ github.event.inputs.omr_ref || 'develop' }}
         run: |
           set -euo pipefail
-          bash .github/scripts/apply-patch-url.sh \
-            "${{ github.event.inputs.mptcp_patch_url || 'https://github.com/Ysurac/openmptcprouter/blob/develop/6.18/target/linux/generic/hack-6.18/999-mptcp-bpf-scheduler.patch' }}" \
-            "MPTCP BPF scheduler patch"
-          bash .github/scripts/apply-patch-url.sh \
-            "${{ github.event.inputs.bbr_v3_patch_url || 'https://github.com/Ysurac/openmptcprouter/raw/refs/heads/develop/6.18/target/linux/generic/hack-6.18/999-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch' }}" \
-            "TCP BBR v3 congestion control patch"
+          # List patch download URLs in <dir> whose name starts with <prefix>, sorted by name.
+          list() {
+            gh api "repos/Ysurac/openmptcprouter/contents/6.18/target/linux/generic/$1?ref=${OMR_REF}" \
+              --jq ".[] | select(.name | startswith(\"$2\")) | .download_url" | sort
+          }
+          # 998-mptcp-pm-* needs the 708-* MPTCP PM limit backports.
+          backports="$(list backport-6.18 708-)"
+          hacks="$(list hack-6.18 99)"
+          [ -n "${hacks}" ] || { echo "No 99* OMR patches found" >&2; exit 1; }
+          for url in ${backports} ${hacks}; do
+            bash .github/scripts/apply-patch-url.sh "${url}" "OMR $(basename "${url}")"
+          done
 
       - name: Configure kernel
         run: |
