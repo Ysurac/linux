@@ -14,7 +14,7 @@ on:
       stable_patch_url:
         description: URL of the upstream stable patch archive to apply
         required: false
-        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz
+        default: https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.64.xz
       omr_ref:
         description: OpenMPTCProuter branch/tag to take the 708-* backports and 99* hack patches from
         required: false
@@ -108,8 +108,8 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/apply-patch-url.sh \
-            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz' }}" \
-            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.63.xz' }}")"
+            "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.64.xz' }}" \
+            "upstream stable patch $(basename "${{ github.event.inputs.stable_patch_url || 'https://cdn.kernel.org/pub/linux/kernel/v6.x/patch-6.18.64.xz' }}")"
 
       - name: Apply XanMod patch stack
         run: |
